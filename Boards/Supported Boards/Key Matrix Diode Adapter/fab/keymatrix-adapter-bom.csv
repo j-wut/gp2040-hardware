@@ -1,0 +1,5 @@
+Qty,References,Value,Footprint,Description
+5,J1 J2 J3 J4 J5,2x10 box header,Connector_IDC:IDC-Header_2x10_P2.54mm_Vertical,"2.54 mm shrouded IDC box header, vertical, through-hole"
+8,J6 J7 J8 J9 J10 J11 J12 J13,10-way terminal,"TerminalBlock_Phoenix:TerminalBlock_Phoenix_PT-1,5-10-3.5-H_1x10_P3.50mm_Horizontal","3.5 mm pitch screw terminal, Phoenix PT 1,5/10-3,5-H or equivalent"
+1,J14,8-way terminal,"TerminalBlock_Phoenix:TerminalBlock_Phoenix_PT-1,5-8-3.5-H_1x08_P3.50mm_Horizontal","3.5 mm pitch screw terminal, Phoenix PT 1,5/8-3,5-H or equivalent"
+44,D1 D2 D3 D4 D5 D6 D7 D8 D9 D10 D11 D12 D13 D14 D15 D16 D17 D18 D19 D20 D21 D22 D23 D24 D25 D26 D27 D28 D29 D30 D31 D32 D33 D34 D35 D36 D37 D38 D39 D40 D41 D42 D43 D44,1N4148W,Diode_SMD:D_SOD-123,"Small-signal switching diode, SOD-123"
