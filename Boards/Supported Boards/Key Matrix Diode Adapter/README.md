@@ -5,7 +5,7 @@ matrix switch inputs with full N-key rollover: all 15 button pins as 4 rows x 11
 `RP2040AdvancedBreakoutBoardUSBPassthroughMatrix` firmware config in
 [j-wut/GP2040-CE](https://github.com/j-wut/GP2040-CE) (keyboard matrix support).
 
-- 85 x 93.4 mm, 2 layers, 0.2 mm tracks, all through-hole connectors plus 44 SOD-123 diodes.
+- 91 x 93.4 mm, 2 layers, 0.2 mm tracks, all through-hole connectors plus 44 SOD-123 diodes.
 - **J1** connects to the breakout board's 20-pin header with a straight 20-pin IDC ribbon cable (pin 1 to pin 1).
 - **J2-J5** are two pairs of 20-pin switch connectors (A and B).
 - **J6-J13** are screw terminals in four rows, two behind each other on each side of the headers: two per switch, in the same order as the connector pins. The

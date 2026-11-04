@@ -387,8 +387,7 @@ def build_schematic(parts):
 
 TERM_IN = 5.6         # front row pads, from the top edge
 TERM_PITCH = 3.5
-TERM_PAD = 2.0       # terminal pad diameter (library: 2.4) for 1.2 mm drill
-TERM_GAP = 5.0        # last pad of one block to first pad of the next in a row
+TERM_GAP = 7.0        # last pad of one block to first pad of the next in a row (leaves a routing channel)
 TERM_FRONT = 5.0      # block body in front of its pads (wire entry side)
 TERM_BACK = 3.6       # block body behind its pads
 ROW_GAP = 6.0         # between one row's back and the next row's wire entry: labels, diodes, wire room
@@ -405,7 +404,7 @@ def _row_len():
 
 
 ROW_PITCH = TERM_FRONT + TERM_BACK + ROW_GAP
-BOARD_W = 85.0
+BOARD_W = 91.0
 TB_START = (BOARD_W - _row_len()) / 2          # first pad of each row
 assert TB_START - 2.25 >= SIDE_MARGIN
 DIODE_REACH = DIODE_BACK + 1.15                # block back to the far side of its diodes
@@ -481,9 +480,6 @@ def build_pcb(parts):
         fp.SetOrientationDegrees(angle)
         fp.SetPosition(vec(x, y))
         for pad in fp.Pads():
-            if p["fp"].startswith("TerminalBlock") and TERM_PAD:
-                # smaller pads leave room for two tracks between neighbouring terminals
-                pad.SetSize(vec(TERM_PAD, TERM_PAD))
             n = pad.GetNumber()
             if n in p["pins"]:
                 pad.SetNet(net(p["pins"][n]))
@@ -570,7 +566,7 @@ def route():
 
     path = os.path.join(HERE, NAME + ".kicad_pcb")
     first = []  # nets that failed before get routed first next time
-    for attempt in range(8):
+    for attempt in range(12):
         board = pcbnew.LoadBoard(path)
         r = autoroute.Router(board, BOARD_W, BOARD_H)
         # group pads by net
