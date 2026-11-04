@@ -5,11 +5,11 @@ matrix switch inputs with full N-key rollover: all 15 button pins as 4 rows x 11
 `RP2040AdvancedBreakoutBoardUSBPassthroughMatrix` firmware config in
 [j-wut/GP2040-CE](https://github.com/j-wut/GP2040-CE) (keyboard matrix support).
 
-- 156 x 112 mm, 2 layers, all through-hole connectors plus 44 SOD-123 diodes.
+- 91 x 93.4 mm, 2 layers, 0.2 mm tracks, all through-hole connectors plus 44 SOD-123 diodes.
 - **J1** connects to the breakout board's 20-pin header with a straight 20-pin IDC ribbon cable (pin 1 to pin 1).
 - **J2-J5** are two pairs of 20-pin switch connectors (A and B).
-- **J6-J14** are screw terminals: two per switch, in the same order as the connector pins. The last 4 switches
-  are on screw terminals only.
+- **J6-J13** are screw terminals in four rows, two behind each other on each side of the headers: two per switch, in the same order as the connector pins. The
+  last 4 switches are on screw terminals only.
 - One 1N4148W diode per switch, already on the board. No diodes are needed in the wiring.
 
 ## How a switch is wired
@@ -62,11 +62,14 @@ Screw terminals only: R4C8, R4C9, R4C10, R4C11.
 
 The screw terminals hold the same slots in the same order, A then B:
 
-- pair 1 along the top edge, left to right
-- pair 2 along the bottom edge, left to right
-- the terminal-only switches down the left edge
+- above the headers, wire entry toward the top edge: the front row (at the edge) has pair 1 pins 1-11, the row
+  behind it has pair 1 pins 12-20, then R4C8 and R4C9
+- below the headers, wire entry toward the bottom edge: the front row (at the edge) has pair 2 pins 1-11, the row
+  behind it has pair 2 pins 12-20, then R4C10 and R4C11
+- every row reads left to right
 
-Each slot is labelled on the silkscreen.
+Each slot's label is printed just behind its two screws. The rows are 6 mm apart, so the wires for a back row
+go in over the diodes of the row in front.
 
 GPIO 20-22 (A2, L3, R3 on the breakout's 4-pin harness) are not on the 20-pin header and stay ordinary buttons on
 the breakout board. Don't wire anything else to the breakout's own K1-K4, P1-P4, S1, S2, A1, L, R, D, U terminals
@@ -115,7 +118,7 @@ design and checks:
 - Every one of the 44 switches has its own diode, cathode on the right row. Given a GP2040-CE checkout, the rows and
   columns must also match `KEY_MATRIX_ROW_PINS` / `KEY_MATRIX_COL_PINS` in the firmware board config.
 - Every switch is on exactly one connector slot. Pair 1 is in breakout pin order. The screw terminals, read around
-  the board, are in the same slot order as the connectors.
+  the board, are in the same slot order as the connectors, with the terminal-only switches in order between them.
 
 ## Simulation
 
@@ -127,9 +130,9 @@ does and checks every read for several held-switch patterns, including all 44 he
 
 | Wiring (ribbon / switch wire / column chain) | Press seen at the pin | Column recovery | Result with defaults |
 |-----|-----|-----|-----|
-| short: 0.15 m / 0.2 m / 1 m | 0.2 us | up to 11 us | pass |
-| typical arcade stick: 0.3 m / 0.5 m / 3 m | 0.4 us | up to 20 us | pass |
-| long cabinet: 1 m / 1 m / 6 m | 0.6 us | up to 35 us | pass |
+| short: 0.15 m / 0.2 m / 1 m | 0.2 us | up to 10 us | pass |
+| typical arcade stick: 0.3 m / 0.5 m / 3 m | 0.3 us | up to 19 us | pass |
+| long cabinet: 1 m / 1 m / 6 m | 0.6 us | up to 34 us | pass |
 
 Wire length adds no meaningful latency: a press shows up at the pin in under 0.6 us even with cabinet
 wiring. What wiring does set is how long a released row's columns take to climb back through the RP2040's weak

@@ -202,9 +202,8 @@ def check_firmware(pcb):
     # order, A then B for each slot
     board = pcbnew.LoadBoard(PCB)
     term_order = []
-    for i, (ref, start, count) in enumerate(generate.BLOCKS):
+    for ref, edge, _ in generate.BLOCKS:
         fp = board.FindFootprintByReference(ref)
-        edge = generate.block_layout(i)[0]
         pads = list(fp.Pads())
         key = (lambda q: q.GetPosition().x) if edge in ("top", "bottom") else (lambda q: q.GetPosition().y)
         pads.sort(key=key)
@@ -214,10 +213,12 @@ def check_firmware(pcb):
             if sw is None:
                 fail(f"{ref} terminals {j + 1}-{j + 2}: {nets[j]} / {nets[j + 1]} is not a switch")
             term_order.append(sw)
-    # the terminals start with the connector slots in the same order; switches
-    # beyond the connector pairs follow on terminals only. Every switch once.
+    # read around the board, the terminals carry the connector slots in the
+    # same order; the terminal-only switches sit in between, in their own order.
+    # Every switch once.
     switches = [t for t in term_order if t != "gp19"]
-    if term_order[:len(order)] != order:
+    extra = [t for t in term_order if t not in seen]
+    if [t for t in term_order if t in seen] != order or extra != sorted(extra):
         fail("screw terminal order differs from the connector order")
     elif sorted(switches) != list(range(len(rows) * len(cols))):
         fail("screw terminals do not carry every switch exactly once")
@@ -248,7 +249,7 @@ def fab():
         "Device:D": ("1N4148W", "Small-signal switching diode, SOD-123"),
         "Connector_Generic:Conn_02x10_Odd_Even": ("2x10 box header", "2.54 mm shrouded IDC box header, vertical, through-hole"),
         "Connector:Screw_Terminal_01x10": ("10-way terminal", "3.5 mm pitch screw terminal, Phoenix PT 1,5/10-3,5-H or equivalent"),
-        "Connector:Screw_Terminal_01x08": ("8-way terminal", "3.5 mm pitch screw terminal, Phoenix PT 1,5/8-3,5-H or equivalent"),
+        "Connector:Screw_Terminal_01x12": ("12-way terminal", "3.5 mm pitch screw terminal, Phoenix PT 1,5/12-3,5-H or equivalent"),
     }
     groups = {}
     for p in generate.build_parts():

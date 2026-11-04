@@ -1,7 +1,7 @@
 """A small two-layer grid router for the key matrix adapter.
 
-Tracks run on a 0.5 mm grid, horizontal and vertical only, so two tracks on
-neighbouring grid lines keep 0.2 mm of clearance with 0.3 mm wide tracks.
+Tracks run on a 0.4 mm grid, horizontal and vertical only, so two tracks on
+neighbouring grid lines keep 0.2 mm of clearance with 0.2 mm wide tracks.
 Each net is grown as a tree: Dijkstra from everything already routed for the
 net to the nearest unrouted pad. F.Cu prefers vertical runs and B.Cu prefers
 horizontal runs, and vias cost extra, which gives a tidy layout. KiCad's own
@@ -13,12 +13,13 @@ import math
 
 import pcbnew
 
-GRID = 0.5
-TRACK_W = 0.3
+GRID = 0.4
+TRACK_W = 0.2
 CLEAR = 0.2
-VIA_D = 0.7
-VIA_DRILL = 0.35
+VIA_D = 0.6
+VIA_DRILL = 0.3
 EDGE_CLEAR = 0.5
+HOLE_CLEAR = 0.3  # via to a mounting hole (board rule is 0.25)
 VIA_COST = 12
 WRONG_WAY = 3
 # grid steps between two allowed cells can pass closer to a round pad than
@@ -27,6 +28,10 @@ MARGIN = 0.08  # cost per step against a layer's preferred direction
 
 FREE = 0
 BLOCKED = -1
+
+# grid offsets around a via that are too close for another net's track
+VIA_NEIGH = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)
+             and math.hypot(dx, dy) * GRID < VIA_D / 2 + TRACK_W / 2 + CLEAR]
 
 
 class Router:
@@ -104,7 +109,7 @@ class Router:
                     layers = [0, 1]
                     code = BLOCKED
                 inside = []
-                for gx, gy, d in self._cells_near(shape, CLEAR + VIA_D / 2 + 0.01):
+                for gx, gy, d in self._cells_near(shape, max(CLEAR, HOLE_CLEAR) + VIA_D / 2 + 0.01):
                     i = self.idx(gx, gy)
                     for l in layers:
                         if d < CLEAR + TRACK_W / 2 + MARGIN:
@@ -115,7 +120,7 @@ class Router:
                             self.via_ok[l][i] = code if cur in (FREE, code) else BLOCKED
                         # a via must not sit in a THT drill or on a pad edge;
                         # only allow it well inside nothing at all
-                        if d <= 0 and npth:
+                        if npth and d < VIA_D / 2 + HOLE_CLEAR:
                             self.via_ok[l][i] = BLOCKED
                         if d < -0.1 and code > 0:
                             inside.append((l, i))
@@ -147,7 +152,7 @@ class Router:
                 return False
         # neighbouring cells must not carry another net's copper
         gx, gy = i % self.nx, i // self.nx
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        for dx, dy in VIA_NEIGH:
             nx, ny = gx + dx, gy + dy
             if 0 <= nx < self.nx and 0 <= ny < self.ny:
                 j = self.idx(nx, ny)
@@ -246,7 +251,7 @@ class Router:
             self.occ[l][i] = code
         # keep other nets one cell away from the via
         gx, gy = i % self.nx, i // self.nx
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        for dx, dy in VIA_NEIGH:
             nxx, nyy = gx + dx, gy + dy
             if 0 <= nxx < self.nx and 0 <= nyy < self.ny:
                 j = self.idx(nxx, nyy)
