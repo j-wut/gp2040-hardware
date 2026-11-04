@@ -145,25 +145,33 @@ def pair_refs(p):
     return f"J{2 + 2 * p}", f"J{3 + 2 * p}"
 
 
-# Screw terminal blocks run around all four edges: pair 1 along the top and on
-# down the right side, pair 2 along the bottom and on down the left side. Each
-# side ends with two of the terminal-only switches, so all four edges are full.
-# (edge, slot indices), in the order the blocks are read around the board.
-def _edge_plan():
+# Screw terminal blocks stand in rows, two behind each other above the headers
+# (wire entry toward the top edge, pair 1) and two below them (wire entry
+# toward the bottom edge, pair 2). The front row (at the board edge) holds pins
+# 1-11 of its pair, the row behind it pins 12-20 and then two of the
+# terminal-only switches. Each row is a 12-way and a 10-way block, read left to
+# right.
+ROW_SLOTS = 11
+
+
+def _row_plan():
     p1 = list(range(PAIR_PINS))
     p2 = list(range(PAIR_PINS, 2 * PAIR_PINS))
     extra = list(range(2 * PAIR_PINS, len(SLOTS)))
     half = len(extra) // 2
-    plan = []
-    for edge, slots in (("top", p1[:12]), ("right", p1[12:] + extra[:half]),
-                        ("bottom", p2[:12]), ("left", p2[12:] + extra[half:])):
-        n = len(slots) // 2
-        plan += [(edge, slots[:n]), (edge, slots[n:])]
-    return plan
+    rows = [p1[:ROW_SLOTS], p1[ROW_SLOTS:] + extra[:half],
+            p2[:ROW_SLOTS], p2[ROW_SLOTS:] + extra[half:]]
+    return [(r, slots[:6]) for r, slots in enumerate(rows)] + \
+           [(r, slots[6:]) for r, slots in enumerate(rows)]
 
 
-# terminal blocks: (ref, edge, slot indices)
-BLOCKS = [(f"J{2 + 2 * NUM_PAIRS + i}", edge, slots) for i, (edge, slots) in enumerate(_edge_plan())]
+# terminal blocks: (ref, edge the wire entry faces, slot indices), in reading
+# order; BLOCK_ROW gives each block's row (0 = front)
+_plan = sorted(_row_plan(), key=lambda b: (b[0], b[1][0]))
+ROW_EDGE = ["top", "top", "bottom", "bottom"]   # edge each row's wire entry faces
+ROW_DEPTH = [0, 1, 0, 1]                       # 0 = front row at that edge
+BLOCKS = [(f"J{2 + 2 * NUM_PAIRS + i}", ROW_EDGE[r], slots) for i, (r, slots) in enumerate(_plan)]
+BLOCK_ROW = [r for r, _ in _plan]
 assert sorted(i for _, _, sl in BLOCKS for i in sl) == list(range(len(SLOTS)))
 
 
@@ -356,7 +364,7 @@ def build_schematic(parts):
     out.append('(kicad_sch (version 20230121) (generator eeschema)\n')
     out.append(f'  (uuid {root})\n')
     out.append('  (paper "A3")\n')
-    out.append(f'  (title_block\n    (title "GP2040-CE Key Matrix Diode Adapter")\n    (rev "1.3")\n'
+    out.append(f'  (title_block\n    (title "GP2040-CE Key Matrix Diode Adapter")\n    (rev "1.4")\n'
                f'    (comment 1 "For RP2040 Advanced Breakout Board - USB Passthrough, 20-pin header")\n'
                f'    (comment 2 "Firmware: RP2040AdvancedBreakoutBoardUSBPassthroughMatrix")\n  )\n')
     out.append('  (lib_symbols\n')
@@ -377,34 +385,49 @@ def build_schematic(parts):
 # PCB
 # ---------------------------------------------------------------------------
 
-TERM_IN = 5.6         # terminal pads, measured in from the board edge
+TERM_IN = 5.6         # front row pads, from the top edge
 TERM_PITCH = 3.5
-TERM_GAP = 5.0        # last pad of one block to first pad of the next on the same edge
-DIODE_IN = 7.4        # diode centre, measured inward from its terminal pad
-LABEL_IN = 4.35       # slot label, measured inward from the terminal pads
-TB_START = 10.5       # first pad on the top and bottom edges, from the left edge
-SIDE_START = 16.8     # first pad on the side edges, from the top edge (clears the corner diodes)
+TERM_PAD = 2.0       # terminal pad diameter (library: 2.4) for 1.2 mm drill
+TERM_GAP = 5.0        # last pad of one block to first pad of the next in a row
+TERM_FRONT = 5.0      # block body in front of its pads (wire entry side)
+TERM_BACK = 3.6       # block body behind its pads
+ROW_GAP = 6.0         # between one row's back and the next row's wire entry: labels, diodes, wire room
+LABEL_BACK = 1.0      # slot label, behind the block body
+DIODE_BACK = 3.6      # diode centre, behind the block body
 HEADER_PITCH = 14.0
+SIDE_MARGIN = 2.75    # board edge to the end of a terminal row
+NUM_ROWS = max(BLOCK_ROW) + 1
 
 
-def _edge_len(edge):
-    n = [2 * len(sl) for _, e, sl in BLOCKS if e == edge]
+def _row_len():
+    n = [2 * len(sl) for (_, _, sl), r in zip(BLOCKS, BLOCK_ROW) if r == 0]
     return sum(k - 1 for k in n) * TERM_PITCH + (len(n) - 1) * TERM_GAP
 
 
-BOARD_W = round(2 * TB_START + max(_edge_len("top"), _edge_len("bottom")), 1)
-BOARD_H = round(2 * SIDE_START + max(_edge_len("left"), _edge_len("right")), 1)
+ROW_PITCH = TERM_FRONT + TERM_BACK + ROW_GAP
+BOARD_W = 85.0
+TB_START = (BOARD_W - _row_len()) / 2          # first pad of each row
+assert TB_START - 2.25 >= SIDE_MARGIN
+DIODE_REACH = DIODE_BACK + 1.15                # block back to the far side of its diodes
+INNER_BACK = TERM_IN + ROW_PITCH + TERM_BACK   # back of the inner rows, from their edge
+HEADER_Y = round(INNER_BACK + DIODE_REACH + 0.3 + 5.6, 1)    # header pin 1, below the top rows' diodes
+HEADER_LABEL_Y = HEADER_Y + 28.46 + 1.1
+BOARD_H = round(HEADER_LABEL_Y + 0.8 + DIODE_REACH + INNER_BACK, 1)
+
+
+def row_y(r):
+    d = TERM_IN + ROW_DEPTH[r] * ROW_PITCH
+    return d if ROW_EDGE[r] == "top" else BOARD_H - d
 
 
 def block_layout(i):
-    """Edge and first pad position (x on top/bottom, y on the sides, in reading
-    order) of terminal block i."""
-    _, edge, _ = BLOCKS[i]
-    pos = TB_START if edge in ("top", "bottom") else SIDE_START
-    for _, e, sl in BLOCKS[:i]:
-        if e == edge:
-            pos += (2 * len(sl) - 1) * TERM_PITCH + TERM_GAP
-    return edge, pos
+    """Edge the wire entry faces and first pad x of terminal block i."""
+    r = BLOCK_ROW[i]
+    pos = TB_START
+    for j in range(i):
+        if BLOCK_ROW[j] == r:
+            pos += (2 * len(BLOCKS[j][2]) - 1) * TERM_PITCH + TERM_GAP
+    return ROW_EDGE[r], pos
 
 
 def build_pcb(parts):
@@ -458,6 +481,9 @@ def build_pcb(parts):
         fp.SetOrientationDegrees(angle)
         fp.SetPosition(vec(x, y))
         for pad in fp.Pads():
+            if p["fp"].startswith("TerminalBlock") and TERM_PAD:
+                # smaller pads leave room for two tracks between neighbouring terminals
+                pad.SetSize(vec(TERM_PAD, TERM_PAD))
             n = pad.GetNumber()
             if n in p["pins"]:
                 pad.SetNet(net(p["pins"][n]))
@@ -466,59 +492,44 @@ def build_pcb(parts):
     byref = {p["ref"]: p for p in parts}
     fps = {}
 
-    # Terminal blocks: wire entry faces the board edge. Slots run left to right
-    # (top and bottom edges) or top to bottom (sides), A then B for each slot.
-    # Each slot's diode sits right behind its A terminal, anode toward it.
+    # Terminal blocks: rows one behind another, wire entry toward their edge.
+    # Slots run left to right, A then B for each slot. Behind each row are its
+    # slot labels and then its diodes, one behind each A terminal.
     slot_label_pos = []
     diode_of = {f"SW_R{p['row'] + 1}C{p['col'] + 1}": p for p in parts if p["ref"].startswith("D")}
     for i, (ref, _, slots) in enumerate(BLOCKS):
         edge, first = block_layout(i)
         n = 2 * len(slots)
         last = first + (n - 1) * TERM_PITCH
-        if edge == "top":       # rotated 180: pad 1 on the right... so pad n is leftmost
-            pos = lambda v: (v, TERM_IN)
-            inward = (0, 1)
-            anchor, angle = pos(last), 180
-        elif edge == "bottom":
-            pos = lambda v: (v, BOARD_H - TERM_IN)
-            inward = (0, -1)
-            anchor, angle = pos(first), 0
-        elif edge == "left":    # rotated 270: pad 1 at the top
-            pos = lambda v: (TERM_IN, v)
-            inward = (1, 0)
-            anchor, angle = pos(first), 270
-        else:                   # rotated 90: pad 1 at the bottom
-            pos = lambda v: (BOARD_W - TERM_IN, v)
-            inward = (-1, 0)
-            anchor, angle = pos(last), 90
-        # build_parts numbered the pads in slot order (1 = first A). Re-number
-        # them to the footprint's physical order.
-        fps[ref] = add(byref[ref], *anchor, angle)
+        y = row_y(BLOCK_ROW[i])
+        inward = 1 if edge == "top" else -1
+        back = y + inward * TERM_BACK
+        # top rows are rotated 180 so the wire entry faces the top edge, which
+        # puts pad n leftmost; build_parts numbered the pads to match
+        if edge == "top":
+            fps[ref] = add(byref[ref], last, y, 180)
+        else:
+            fps[ref] = add(byref[ref], first, y, 0)
         for j, s in enumerate(slots):
-            ax, ay = pos(first + 2 * j * TERM_PITCH)
-            cx, cy = pos(first + (2 * j + 0.5) * TERM_PITCH)
+            ax = first + 2 * j * TERM_PITCH
             pair, pin, item = SLOTS[s]
-            # side labels are horizontal, so move them further in to clear the block
-            lin = LABEL_IN if edge in ("top", "bottom") else LABEL_IN + 2.2
-            slot_label_pos.append((slot_label(pair, pin, item), cx + inward[0] * lin,
-                                   cy + inward[1] * lin))
+            slot_label_pos.append((slot_label(pair, pin, item), ax + TERM_PITCH / 2, back + inward * LABEL_BACK))
             if item[0] == "sw":
                 d = diode_of[slot_nets(item)[0]]
-                dx, dy = ax + inward[0] * DIODE_IN, ay + inward[1] * DIODE_IN
-                d_angle = {"top": 90, "bottom": 270, "left": 180, "right": 0}[edge]
-                fps[d["ref"]] = add(d, dx, dy, d_angle)
+                fps[d["ref"]] = add(d, ax, back + inward * DIODE_BACK, 0)
 
-    # Headers stand vertically in a row across the middle, pin 1 at the top
+    # Headers stand vertically in a row between the terminal rows, pin 1 at the top
     # left: J1 to the breakout, then the switch connector pairs (A, B, A, B, ...).
     header_refs = ["J1"] + [r for p in range(NUM_PAIRS) for r in pair_refs(p)]
     span = (len(header_refs) - 1) * HEADER_PITCH + 2.54
     hx0 = (BOARD_W - span) / 2
-    hy0 = BOARD_H / 2 - 15.8  # headers plus the text under them, centred
+    hy0 = HEADER_Y
     for i, ref in enumerate(header_refs):
         fps[ref] = add(byref[ref], hx0 + i * HEADER_PITCH, hy0, 0)
 
-    for i, (x, y) in enumerate([(4.2, 4.2), (4.2, BOARD_H - 4.2),
-                                (BOARD_W - 4.2, 4.2), (BOARD_W - 4.2, BOARD_H - 4.2)]):
+    # mounting holes beside the headers
+    for i, (x, y) in enumerate([(3.8, hy0 + 1.0), (3.8, HEADER_LABEL_Y - 3.0),
+                                (BOARD_W - 3.8, hy0 + 1.0), (BOARD_W - 3.8, HEADER_LABEL_Y - 3.0)]):
         fps[f"H{i + 1}"] = add(byref[f"H{i + 1}"], x, y, 0)
 
     # Reference designators stay on the fab layer; the silkscreen gets plain
@@ -540,16 +551,12 @@ def build_pcb(parts):
     for text_, x, y in slot_label_pos:
         silk(text_, x, y, 0.9)
 
-    ly2 = hy0 + 9 * 2.54 + 7.0
+    ly2 = HEADER_LABEL_Y
     silk("BREAKOUT", hx0 + 1.27, ly2, 1.0, bold=True)
     for p in range(NUM_PAIRS):
         for i, side in enumerate("AB"):
             x = hx0 + (1 + 2 * p + i) * HEADER_PITCH + 1.27
             silk(f"PAIR {p + 1} {side}", x, ly2, 1.0, bold=True)
-    silk("GP2040-CE KEY MATRIX ADAPTER v1.3", BOARD_W / 2, ly2 + 3.0, 1.2, bold=True)
-    silk("SWITCH: PIN N ON A <-> PIN N ON B, OR ITS TWO SCREW TERMINALS", BOARD_W / 2, ly2 + 5.0, 0.9)
-    silk("PAIR 1 = BREAKOUT PIN ORDER. TERMINALS: PAIR 1 TOP + RIGHT,", BOARD_W / 2, ly2 + 6.6, 0.9)
-    silk("PAIR 2 BOTTOM + LEFT, TERMINALS-ONLY SWITCHES AT THE SIDE ENDS", BOARD_W / 2, ly2 + 8.2, 0.9)
 
     path = os.path.join(HERE, NAME + ".kicad_pcb")
     board.SetFileName(path)

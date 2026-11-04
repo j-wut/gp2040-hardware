@@ -1,16 +1,16 @@
-Adapter PCB copper per net: rows 29.0-41.8 pF, columns 38.8-49.8 pF
+Adapter PCB copper per net: rows 28.9-39.7 pF, columns 31.7-57.4 pF
 Timing: settle 5 us, row delay 50 us -> full scan about 224 us (USB reports every 1000 us)
 Pass = pressed reads < 0.8 V and open reads > 2.0 V on all 44 switches, every pattern
 
 wiring (ribbon / switch wire / column chain)   pull-up press seen  recovery worst pressed worst open  result
-no wiring (pins only)                             50k      94 ns    3.1 us       0.482 V    3.300 V  PASS
-no wiring (pins only)                             80k      93 ns    5.0 us       0.451 V    3.299 V  PASS
-short: bench test (0.15 / 0.2 / 1 m)              50k     189 ns    6.1 us       0.482 V    3.296 V  PASS
-short: bench test (0.15 / 0.2 / 1 m)              80k     187 ns    9.9 us       0.451 V    3.257 V  PASS
-typical: arcade stick (0.3 / 0.5 / 3 m)           50k     341 ns   11.4 us       0.482 V    3.227 V  PASS
-typical: arcade stick (0.3 / 0.5 / 3 m)           80k     340 ns   18.5 us       0.451 V    3.013 V  PASS
-long: cabinet (1 / 1 / 6 m)                       50k     572 ns   20.5 us       0.482 V    2.939 V  PASS
-long: cabinet (1 / 1 / 6 m)                       80k     570 ns   33.3 us       0.453 V    2.514 V  PASS
+no wiring (pins only)                             50k      89 ns    3.4 us       0.482 V    3.300 V  PASS
+no wiring (pins only)                             80k      88 ns    5.5 us       0.451 V    3.298 V  PASS
+short: bench test (0.15 / 0.2 / 1 m)              50k     187 ns    6.4 us       0.482 V    3.295 V  PASS
+short: bench test (0.15 / 0.2 / 1 m)              80k     183 ns   10.3 us       0.451 V    3.249 V  PASS
+typical: arcade stick (0.3 / 0.5 / 3 m)           50k     339 ns   11.7 us       0.482 V    3.221 V  PASS
+typical: arcade stick (0.3 / 0.5 / 3 m)           80k     338 ns   19.0 us       0.451 V    2.998 V  PASS
+long: cabinet (1 / 1 / 6 m)                       50k     569 ns   20.8 us       0.482 V    2.931 V  PASS
+long: cabinet (1 / 1 / 6 m)                       80k     567 ns   33.7 us       0.453 V    2.504 V  PASS
 
 press seen: time from the row going low until a pressed column reads low at the RP2040 pin
 recovery:   time after a row is released until its columns read high again (row delay must cover it)

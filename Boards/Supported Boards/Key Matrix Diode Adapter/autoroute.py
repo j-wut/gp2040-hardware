@@ -19,6 +19,7 @@ CLEAR = 0.2
 VIA_D = 0.6
 VIA_DRILL = 0.3
 EDGE_CLEAR = 0.5
+HOLE_CLEAR = 0.3  # via to a mounting hole (board rule is 0.25)
 VIA_COST = 12
 WRONG_WAY = 3
 # grid steps between two allowed cells can pass closer to a round pad than
@@ -108,7 +109,7 @@ class Router:
                     layers = [0, 1]
                     code = BLOCKED
                 inside = []
-                for gx, gy, d in self._cells_near(shape, CLEAR + VIA_D / 2 + 0.01):
+                for gx, gy, d in self._cells_near(shape, max(CLEAR, HOLE_CLEAR) + VIA_D / 2 + 0.01):
                     i = self.idx(gx, gy)
                     for l in layers:
                         if d < CLEAR + TRACK_W / 2 + MARGIN:
@@ -119,7 +120,7 @@ class Router:
                             self.via_ok[l][i] = code if cur in (FREE, code) else BLOCKED
                         # a via must not sit in a THT drill or on a pad edge;
                         # only allow it well inside nothing at all
-                        if d <= 0 and npth:
+                        if npth and d < VIA_D / 2 + HOLE_CLEAR:
                             self.via_ok[l][i] = BLOCKED
                         if d < -0.1 and code > 0:
                             inside.append((l, i))
