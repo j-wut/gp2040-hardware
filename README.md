@@ -67,6 +67,7 @@ Supported Boards
 - [HE Breakout Board v1.1](/Boards/Supported%20Boards/HE%20Breakout%20Board/README.md) - Designed by TheTrain
 - [RPBoy v1.0](/Boards/Supported%20Boards/RPBoy/README.md) - Designed by TheTrain
 - [RPBoy Mini v2.0](/Boards/Supported%20Boards/RPBoy%20Mini/README.md) - Designed by TheTrain
+- [Key Matrix Diode Adapter](/Boards/Supported%20Boards/Key%20Matrix%20Diode%20Adapter/README.md) - 44-switch keyboard-style matrix with N-key rollover for the RP2040 Advanced Breakout Board (USB Passthrough)
 
 Miscellaneous
 
