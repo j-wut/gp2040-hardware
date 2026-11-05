@@ -134,6 +134,10 @@ does and checks every read for several held-switch patterns, including all 44 he
 | typical arcade stick: 0.3 m / 0.5 m / 3 m | 0.3 us | up to 19 us | pass |
 | long cabinet: 1 m / 1 m / 6 m | 0.6 us | up to 34 us | pass |
 
+`python3 simulate.py --trace trace.json` replays a GPIO timeline recorded from the firmware's own scan loop
+instead of the fixed schedule: row drive and release events plus read times in, the voltage and logic level of
+every column at each read out. The input format is in `run_trace()`.
+
 Wire length adds no meaningful latency: a press shows up at the pin in under 0.6 us even with cabinet
 wiring. What wiring does set is how long a released row's columns take to climb back through the RP2040's weak
 pull-ups. The firmware waits a fixed **row delay** after each row for that (default 50 us, set in the web config

@@ -11,7 +11,7 @@ Every row and column is modelled from the RP2040 pin to the switch:
                (track length, vias and pads)
   diodes       one 1N4148W per switch on the adapter, cathode to the row
   harness      each switch's own wire (switch to its R terminal) and the column
-               common wire daisy-chained through the six switches of a column,
+               common wire daisy-chained through the four switches of a column,
                as an LC ladder with the switches tapped along it
 
 The scan follows the firmware: pull a row low, wait the settle time (5 us),
@@ -26,6 +26,7 @@ For each wiring length it reports:
     patterns (pressed < 0.8 V, open > 2.0 V on every switch)
 
 Usage: python3 simulate.py   (needs ngspice, and KiCad's Python module for the PCB numbers)
+       python3 simulate.py --trace trace.json   replays a firmware GPIO trace (see run_trace)
 """
 
 import itertools
@@ -112,19 +113,25 @@ def ladder(lines, name, a, b, length, l_per_m, c_per_m):
         prev = node
 
 
-def netlist(pressed, wiring, pullup, caps, gap_us, cycles):
-    _, ribbon, sw_wire, chain = wiring
+def scan_intervals(gap_us, cycles):
+    """The firmware's fixed scan: row r low for the settle time, then the gap."""
     t = SETTLE_US * 1e-6
     w = t + gap_us * 1e-6
+    lows = {r: [((cyc * ROWS + r) * w, (cyc * ROWS + r) * w + t) for cyc in range(cycles)] for r in range(ROWS)}
+    return lows, cycles * ROWS * w
+
+
+def netlist(pressed, wiring, pullup, caps, lows, end):
+    """lows: row -> list of (start, end) seconds when the firmware drives it low."""
+    _, ribbon, sw_wire, chain = wiring
     L = [DIODE_MODEL, "VDD vdd 0 DC 3.3", f".model SWG SW(Ron={RON} Roff=1e12 Vt=0.5 Vh=0)",
          ".model SWK SW(Ron=0.1 Roff=1e12 Vt=0.5 Vh=0)", "VON on 0 DC 1"]
     for r in range(ROWS):
         rn = generate.row_net(r)
         L += [f"RPU_r{r} vdd rm{r} {pullup}", f"CP_r{r} rm{r} 0 {PIN_C}"]
         pwl = ["0 0"]
-        for cyc in range(cycles):
-            s = (cyc * ROWS + r) * w
-            pwl += [f"{s + 1e-9:.12g} 0", f"{s + 2e-9:.12g} 1", f"{s + t - 1e-9:.12g} 1", f"{s + t:.12g} 0"]
+        for a, b in sorted(lows.get(r, [])):
+            pwl += [f"{a + 1e-9:.12g} 0", f"{a + 2e-9:.12g} 1", f"{b - 1e-9:.12g} 1", f"{b:.12g} 0"]
         L += [f"VD{r} d{r} 0 PWL({' '.join(pwl)})", f"SD{r} rm{r} 0 d{r} 0 SWG"]
         ladder(L, f"rr{r}", f"rm{r}", f"ra{r}", ribbon, RIBBON_L, RIBBON_C)
         L.append(f"CPCB_r{r} ra{r} 0 {caps.get(rn, 10e-12):.4g}")
@@ -133,7 +140,7 @@ def netlist(pressed, wiring, pullup, caps, gap_us, cycles):
         L += [f"RPU_c{c} vdd cm{c} {pullup}", f"CP_c{c} cm{c} 0 {PIN_C}"]
         ladder(L, f"rc{c}", f"cm{c}", f"ca{c}", ribbon, RIBBON_L, RIBBON_C)
         L.append(f"CPCB_c{c} ca{c} 0 {caps.get(cn, 10e-12):.4g}")
-        # column common daisy-chained from the C terminal through the 6 switches
+        # column common daisy-chained from the B terminal through the column's switches
         prev = f"ca{c}"
         for r in range(ROWS):
             ladder(L, f"ch{c}_{r}", prev, f"ch{c}t{r}", chain / ROWS, WIRE_L, WIRE_C)
@@ -148,14 +155,26 @@ def netlist(pressed, wiring, pullup, caps, gap_us, cycles):
             L.append(f"SK{r}_{c} sk{r}_{c} ch{c}t{r} on 0 SWK")
         else:
             L.append(f"RK{r}_{c} sk{r}_{c} ch{c}t{r} 1e12")
-    end = cycles * ROWS * w
     L += [f".tran 20n {end:.6g} 0 0.25u", ".options method=gear", ".control", "run"]
-    return L, t, w
+    return L
+
+
+def run_ngspice(L):
+    with tempfile.NamedTemporaryFile("w", suffix=".cir", delete=False) as f:
+        f.write("* adapter matrix\n" + "\n".join(L))
+        path = f.name
+    try:
+        return subprocess.run(["ngspice", "-b", path], capture_output=True, text=True).stdout
+    finally:
+        os.unlink(path)
 
 
 def simulate(pressed, wiring, pullup, caps, gap_us, cycles=2):
     """Column readings in the last scan, recovery times, and press detection times."""
-    L, t, w = netlist(pressed, wiring, pullup, caps, gap_us, cycles)
+    t = SETTLE_US * 1e-6
+    w = t + gap_us * 1e-6
+    lows, end = scan_intervals(gap_us, cycles)
+    L = netlist(pressed, wiring, pullup, caps, lows, end)
     meas = []
     base = cycles - 1  # last pass: with 2 passes every row follows a scanned row
     for cyc in (base,):
@@ -167,13 +186,7 @@ def simulate(pressed, wiring, pullup, caps, gap_us, cycles=2):
                     meas.append(f"meas tran det_{r}_{c} WHEN v(cm{c})={VIL} FALL=1 FROM={s:.12g}")
                     meas.append(f"meas tran rec_{r}_{c} WHEN v(cm{c})={VIH} RISE=1 FROM={s + t:.12g}")
     L += meas + [".endc", ".end"]
-    with tempfile.NamedTemporaryFile("w", suffix=".cir", delete=False) as f:
-        f.write("* adapter matrix\n" + "\n".join(L))
-        path = f.name
-    try:
-        out = subprocess.run(["ngspice", "-b", path], capture_output=True, text=True).stdout
-    finally:
-        os.unlink(path)
+    out = run_ngspice(L)
     vals = {}
     for m in re.finditer(r"^(v|det|rec)_(\d+)_(\d+)\s*=\s*([-+0-9.eE]+)", out, re.M):
         vals[(m.group(1), int(m.group(2)), int(m.group(3)))] = float(m.group(4))
@@ -185,7 +198,61 @@ def simulate(pressed, wiring, pullup, caps, gap_us, cycles=2):
     return reads, det * 1e6, rec * 1e6
 
 
+def run_trace(path):
+    """Replay a GPIO trace recorded from the firmware's scan loop.
+
+    Input JSON:
+      {"wiring": "typical",            # name prefix from WIRING (default "typical")
+       "pullup": 50000,                # RP2040 pull-up in ohms (default 50000)
+       "pressed": [[row, col], ...],   # 0-based, rows = ROW_GPIOS order, cols = COL_GPIOS order
+       "events": [{"t_us": 0, "gpio": 16, "drive": "low"},       # firmware drives a row low
+                  {"t_us": 5, "read": true},                     # firmware reads the columns
+                  {"t_us": 5.2, "gpio": 16, "drive": "release"}, # row back to input (pull-up)
+                  ...]}
+    Output JSON on stdout: one entry per read with each column's voltage at the
+    RP2040 pin and its logic level (1, 0, or null between VIL and VIH)."""
+    import json
+    spec = json.load(open(path))
+    wname = spec.get("wiring", "typical")
+    wiring = next(w for w in WIRING if w[0].startswith(wname))
+    pullup = float(spec.get("pullup", 50e3))
+    pressed = {tuple(p) for p in spec.get("pressed", [])}
+    lows, start, reads = {}, {}, []
+    for ev in sorted(spec["events"], key=lambda e: e["t_us"]):
+        t = ev["t_us"] * 1e-6
+        if ev.get("read"):
+            reads.append(t)
+        elif "gpio" in ev:
+            r = generate.ROW_GPIOS.index(ev["gpio"])
+            if ev["drive"] == "low":
+                start.setdefault(r, t)
+            elif r in start:
+                lows.setdefault(r, []).append((start.pop(r), t))
+    end = max([e["t_us"] for e in spec["events"]]) * 1e-6 + 1e-6
+    for r, a in start.items():
+        lows.setdefault(r, []).append((a, end))
+    caps, _ = pcb_caps()
+    L = netlist(pressed, wiring, pullup, caps, lows, end)
+    for i, t in enumerate(reads):
+        for c in range(COLS):
+            L.append(f"meas tran v_{i}_{c} FIND v(cm{c}) AT={max(t, 1e-9):.12g}")
+    out = run_ngspice(L + [".endc", ".end"])
+    vals = {(int(m.group(1)), int(m.group(2))): float(m.group(3))
+            for m in re.finditer(r"^v_(\d+)_(\d+)\s*=\s*([-+0-9.eE]+)", out, re.M)}
+    if len(vals) != len(reads) * COLS:
+        sys.exit("ngspice did not return every reading:\n" + out[-3000:])
+    level = lambda v: 1 if v >= VIH else 0 if v <= VIL else None
+    result = [{"t_us": round(t * 1e6, 4),
+               "columns": {str(g): {"v": round(vals[(i, c)], 4), "level": level(vals[(i, c)])}
+                           for c, g in enumerate(generate.COL_GPIOS)}}
+              for i, t in enumerate(reads)]
+    json.dump({"wiring": wiring[0], "pullup": pullup, "reads": result}, sys.stdout, indent=1)
+    print()
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--trace":
+        return run_trace(sys.argv[2])
     caps, note = pcb_caps()
     if note:
         print(note)
